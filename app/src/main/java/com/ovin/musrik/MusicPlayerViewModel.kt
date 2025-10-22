@@ -41,6 +41,9 @@ class MusicPlayerViewModel(private val context: Context) : ViewModel() {
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     _isPlaying.value = playbackState == Player.STATE_READY && isPlaying
+                    if (playbackState == Player.STATE_ENDED) {
+                        nextSong()
+                    }
                 }
 
                 override fun onPositionDiscontinuity(
@@ -48,7 +51,9 @@ class MusicPlayerViewModel(private val context: Context) : ViewModel() {
                     newPosition: Player.PositionInfo,
                     reason: Int
                 ) {
-                    updateCurrentSong()
+                    if (oldPosition.mediaItemIndex != newPosition.mediaItemIndex) {
+                        updateCurrentSong()
+                    }
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -61,17 +66,27 @@ class MusicPlayerViewModel(private val context: Context) : ViewModel() {
     fun loadSongs() {
         viewModelScope.launch {
             _songs.value = musicRepository.getAllSongs()
+            // Add all songs to playlist
+            exoPlayer?.let { player ->
+                player.clearMediaItems()
+                _songs.value.forEach { song ->
+                    val mediaItem = MediaItem.fromUri(song.data)
+                    player.addMediaItem(mediaItem)
+                }
+                player.prepare()
+            }
         }
     }
 
     fun playSong(song: Song) {
         exoPlayer?.let { player ->
-            val mediaItem = MediaItem.fromUri(song.data)
-            player.setMediaItem(mediaItem)
-            player.prepare()
-            player.play()
-            _currentSong.value = song
-            _duration.value = song.duration
+            val index = _songs.value.indexOf(song)
+            if (index >= 0) {
+                player.seekTo(index, 0)
+                player.play()
+                _currentSong.value = song
+                _duration.value = song.duration
+            }
         }
     }
 
